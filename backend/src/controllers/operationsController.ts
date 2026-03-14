@@ -33,7 +33,7 @@ export const validateReceipt = async (req: Request, res: Response) => {
       include: { items: true },
     });
 
-    if (!receipt || receipt.status !== 'PENDING') {
+    if (!receipt || ((receipt.status as string) !== 'PENDING' && (receipt.status as string) !== 'DRAFT')) {
       return res.status(400).json({ message: 'Invalid receipt or already validated' });
     }
 
@@ -83,7 +83,7 @@ export const confirmDelivery = async (req: Request, res: Response) => {
       include: { items: true },
     });
 
-    if (!delivery || delivery.status !== 'PENDING') {
+    if (!delivery || ((delivery.status as string) !== 'PENDING' && (delivery.status as string) !== 'DRAFT')) {
       return res.status(400).json({ message: 'Invalid delivery or already confirmed' });
     }
 
@@ -133,7 +133,7 @@ export const completeTransfer = async (req: Request, res: Response) => {
       include: { items: true },
     });
 
-    if (!transfer || transfer.status !== 'PENDING') {
+    if (!transfer || ((transfer.status as string) !== 'PENDING' && (transfer.status as string) !== 'DRAFT')) {
       return res.status(400).json({ message: 'Invalid transfer or already completed' });
     }
 

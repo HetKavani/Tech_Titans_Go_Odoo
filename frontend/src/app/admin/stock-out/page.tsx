@@ -23,6 +23,8 @@ export default function StockOutPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [isDraftSaved, setIsDraftSaved] = useState(false);
 
   useEffect(() => {
     fetchMeta();
@@ -57,9 +59,9 @@ export default function StockOutPage() {
       setItems(newItems);
   };
 
-  const handleConfirm = async () => {
+  const handleSaveDraft = async () => {
     if (!customer || !warehouseId || items.some(i => !i.productId || i.quantity <= 0)) {
-        setError('Please fill in all fields correctly.');
+        setError('Please fill in all fields correctly before saving draft.');
         return;
     }
 
@@ -69,8 +71,6 @@ export default function StockOutPage() {
 
     try {
         const token = localStorage.getItem('token');
-        
-        // 1. Create Delivery
         const createRes = await fetch('http://localhost:5000/api/operations/deliveries', {
             method: 'POST',
             headers: { 
@@ -81,23 +81,41 @@ export default function StockOutPage() {
         });
 
         const delivery = await createRes.json();
-        if (!createRes.ok) throw new Error(delivery.message || 'Failed to create delivery');
+        if (!createRes.ok) throw new Error(delivery.message || 'Failed to save draft');
 
-        // 2. Confirm Delivery
-        const confirmRes = await fetch(`http://localhost:5000/api/operations/deliveries/${delivery.id}/confirm`, {
+        setDraftId(delivery.id);
+        setIsDraftSaved(true);
+        setSuccess('Delivery saved as DRAFT. You can now confirm it for dispatch.');
+    } catch (err: any) {
+        setError(err.message);
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!draftId) return;
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+        const token = localStorage.getItem('token');
+        const confirmRes = await fetch(`http://localhost:5000/api/operations/deliveries/${draftId}/confirm`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        if (!confirmRes.ok) {
-            const confirmData = await confirmRes.json();
-            throw new Error(confirmData.message || 'Failed to confirm delivery');
-        }
+        const confirmData = await confirmRes.json();
+        if (!confirmRes.ok) throw new Error(confirmData.message || 'Failed to confirm delivery');
 
         setSuccess('Delivery Confirmed Successfully! Stock updated.');
         setItems([{ productId: '', quantity: 1 }]);
         setCustomer('');
         setWarehouseId('');
+        setDraftId(null);
+        setIsDraftSaved(false);
     } catch (err: any) {
         setError(err.message);
     } finally {
@@ -218,13 +236,23 @@ export default function StockOutPage() {
                     </div>
                 </div>
                 <hr className="my-6 border-white/5" />
-                <button 
-                    onClick={handleConfirm}
-                    disabled={loading}
-                    className="w-full py-5 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-                >
-                    <Send className="w-5 h-5" /> {loading ? 'Processing...' : 'Confirm Delivery'}
-                </button>
+                {!isDraftSaved ? (
+                  <button 
+                      onClick={handleSaveDraft}
+                      disabled={loading}
+                      className="w-full py-5 bg-white/10 hover:bg-white/20 text-white border border-white/20 border-dashed rounded-2xl font-bold transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                  >
+                      <Plus className="w-5 h-5 text-purple-400" /> {loading ? 'Saving...' : 'Save as Draft'}
+                  </button>
+                ) : (
+                  <button 
+                      onClick={handleConfirm}
+                      disabled={loading}
+                      className="w-full py-5 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                  >
+                      <Send className="w-5 h-5" /> {loading ? 'Processing...' : 'Confirm Delivery'}
+                  </button>
+                )}
                 <p className="text-[10px] text-gray-500 text-center mt-4 leading-relaxed font-medium uppercase tracking-widest">
                     Real-time Deductions Enabled
                 </p>

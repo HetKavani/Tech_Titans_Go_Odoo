@@ -23,6 +23,8 @@ export default function TransfersPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [isDraftSaved, setIsDraftSaved] = useState(false);
 
   useEffect(() => {
     fetchMeta();
@@ -57,9 +59,9 @@ export default function TransfersPage() {
       setItems(newItems);
   };
 
-  const handleExecute = async () => {
+  const handleSaveDraft = async () => {
     if (!fromWarehouseId || !toWarehouseId || fromWarehouseId === toWarehouseId || items.some(i => !i.productId || i.quantity <= 0)) {
-        setError('Please select different warehouses and fill in all items correctly.');
+        setError('Please select different warehouses and fill in all items correctly before saving draft.');
         return;
     }
 
@@ -69,8 +71,6 @@ export default function TransfersPage() {
 
     try {
         const token = localStorage.getItem('token');
-        
-        // 1. Create Transfer
         const createRes = await fetch('http://localhost:5000/api/operations/transfers', {
             method: 'POST',
             headers: { 
@@ -81,23 +81,41 @@ export default function TransfersPage() {
         });
 
         const transfer = await createRes.json();
-        if (!createRes.ok) throw new Error(transfer.message || 'Failed to create transfer');
+        if (!createRes.ok) throw new Error(transfer.message || 'Failed to save draft');
 
-        // 2. Complete Transfer
-        const completeRes = await fetch(`http://localhost:5000/api/operations/transfers/${transfer.id}/complete`, {
+        setDraftId(transfer.id);
+        setIsDraftSaved(true);
+        setSuccess('Transfer saved as DRAFT. You can now execute it to move stock.');
+    } catch (err: any) {
+        setError(err.message);
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleExecute = async () => {
+    if (!draftId) return;
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+        const token = localStorage.getItem('token');
+        const completeRes = await fetch(`http://localhost:5000/api/operations/transfers/${draftId}/complete`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        if (!completeRes.ok) {
-            const completeData = await completeRes.json();
-            throw new Error(completeData.message || 'Failed to complete transfer');
-        }
+        const completeData = await completeRes.json();
+        if (!completeRes.ok) throw new Error(completeData.message || 'Failed to complete transfer');
 
         setSuccess('Inter-warehouse Transfer Executed! Inventory balanced.');
         setItems([{ productId: '', quantity: 1 }]);
         setFromWarehouseId('');
         setToWarehouseId('');
+        setDraftId(null);
+        setIsDraftSaved(false);
     } catch (err: any) {
         setError(err.message);
     } finally {
@@ -221,13 +239,23 @@ export default function TransfersPage() {
                     </div>
                 </div>
                 <hr className="my-6 border-white/5" />
-                <button 
-                    onClick={handleExecute}
-                    disabled={loading}
-                    className="w-full py-5 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-orange-600/30 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-                >
-                    <Check className="w-5 h-5" /> {loading ? 'Transferring...' : 'Execute Transfer'}
-                </button>
+                {!isDraftSaved ? (
+                  <button 
+                      onClick={handleSaveDraft}
+                      disabled={loading}
+                      className="w-full py-5 bg-white/10 hover:bg-white/20 text-white border border-white/20 border-dashed rounded-2xl font-bold transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                  >
+                      <Plus className="w-5 h-5 text-orange-400" /> {loading ? 'Saving...' : 'Save as Draft'}
+                  </button>
+                ) : (
+                  <button 
+                      onClick={handleExecute}
+                      disabled={loading}
+                      className="w-full py-5 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-orange-600/30 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                  >
+                      <Check className="w-5 h-5" /> {loading ? 'Transferring...' : 'Execute Transfer'}
+                  </button>
+                )}
             </div>
         </div>
       </div>

@@ -23,6 +23,8 @@ export default function StockInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [isDraftSaved, setIsDraftSaved] = useState(false);
 
   useEffect(() => {
     fetchMeta();
@@ -58,9 +60,9 @@ export default function StockInPage() {
       setItems(newItems);
   };
 
-  const handleValidate = async () => {
+  const handleSaveDraft = async () => {
     if (!supplier || !warehouseId || items.some(i => !i.productId || i.quantity <= 0)) {
-        setError('Please fill in all fields correctly.');
+        setError('Please fill in all fields correctly before saving draft.');
         return;
     }
 
@@ -70,8 +72,6 @@ export default function StockInPage() {
 
     try {
         const token = localStorage.getItem('token');
-        
-        // 1. Create Receipt
         const createRes = await fetch('http://localhost:5000/api/operations/receipts', {
             method: 'POST',
             headers: { 
@@ -82,10 +82,28 @@ export default function StockInPage() {
         });
 
         const receipt = await createRes.json();
-        if (!createRes.ok) throw new Error(receipt.message || 'Failed to create receipt');
+        if (!createRes.ok) throw new Error(receipt.message || 'Failed to save draft');
 
-        // 2. Validate Receipt
-        const validateRes = await fetch(`http://localhost:5000/api/operations/receipts/${receipt.id}/validate`, {
+        setDraftId(receipt.id);
+        setIsDraftSaved(true);
+        setSuccess('Receipt saved as DRAFT. You can now commit it to stock.');
+    } catch (err: any) {
+        setError(err.message);
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleCommit = async () => {
+    if (!draftId) return;
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+        const token = localStorage.getItem('token');
+        const validateRes = await fetch(`http://localhost:5000/api/operations/receipts/${draftId}/validate`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -97,6 +115,8 @@ export default function StockInPage() {
         setItems([{ productId: '', quantity: 1 }]);
         setSupplier('');
         setWarehouseId('');
+        setDraftId(null);
+        setIsDraftSaved(false);
     } catch (err: any) {
         setError(err.message);
     } finally {
@@ -223,13 +243,23 @@ export default function StockInPage() {
                     </div>
                 </div>
                 <hr className="my-6 border-white/5" />
-                <button 
-                    onClick={handleValidate}
-                    disabled={loading}
-                    className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-                >
-                    <CheckCircle2 className="w-5 h-5" /> {loading ? 'Validating...' : 'Commit to Stock'}
-                </button>
+                {!isDraftSaved ? (
+                  <button 
+                      onClick={handleSaveDraft}
+                      disabled={loading}
+                      className="w-full py-5 bg-white/10 hover:bg-white/20 text-white border border-white/20 border-dashed rounded-2xl font-bold transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                  >
+                      <Plus className="w-5 h-5 text-blue-400" /> {loading ? 'Saving...' : 'Save as Draft'}
+                  </button>
+                ) : (
+                  <button 
+                      onClick={handleCommit}
+                      disabled={loading}
+                      className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                  >
+                      <CheckCircle2 className="w-5 h-5" /> {loading ? 'Committing...' : 'Commit to Stock'}
+                  </button>
+                )}
                 <p className="text-[10px] text-gray-500 text-center mt-4 leading-relaxed font-medium uppercase tracking-widest">
                     Atomic Update Security Enabled
                 </p>
